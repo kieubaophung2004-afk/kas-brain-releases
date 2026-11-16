@@ -1,0 +1,30 @@
+# Nhận bộ cài được đẩy lên nhánh incoming/vX.Y.Z (chia nhiều phần < 50MB),
+# ghép lại, kiểm tra mã SHA-256, tạo GitHub Release, rồi xoá nhánh tạm.
+name: Publish release
+on:
+  push:
+    branches: ["incoming/**"]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ghép bộ cài và đăng Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd incoming
+          if [ ! -f manifest.env ]; then echo "Chưa đủ phần, chờ lần đẩy sau"; exit 0; fi
+          source manifest.env          # VERSION, PARTS, SHA256
+          n=$(ls part.* | wc -l)
+          if [ "$n" != "$PARTS" ]; then echo "Mới có $n/$PARTS phần"; exit 0; fi
+          EXE="KAS-Brain-Setup-$VERSION.exe"
+          cat part.* > "$EXE"
+          echo "$SHA256  $EXE" | sha256sum -c -
+          echo "$SHA256" > "$EXE.sha256"
+          gh release create "v$VERSION" "$EXE" "$EXE.sha256" \
+            --repo "$GITHUB_REPOSITORY" --title "KAS Brain $VERSION" --notes-file notes.md
+          git push origin --delete "$GITHUB_REF_NAME"
